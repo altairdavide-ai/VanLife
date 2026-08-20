@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<title>VanLife · Computer di bordo</title>
+<meta name="description" content="Computer di bordo per la vita in van: radar pioggia, avvisi meteo geolocalizzati, livella, serbatoi, energia e scorciatoie alle app di bordo.">
+<meta name="theme-color" content="#070b0f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-64.png" sizes="64x64">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="css/app.css">
+<script src="vendor/leaflet/leaflet.js" defer></script>
+<script src="vendor/suncalc.js" defer></script>
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<div id="boot" class="boot">
+  <div class="boot-inner">
+    <div class="boot-logo">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="44" class="bl-ring"/>
+        <path d="M16 46 L16 66 Q16 70 20 70 L80 70 Q84 70 84 66 L84 46 Q84 42 80 42 L34 42 L24 46 Z" class="bl-body"/>
+        <rect x="44" y="34" width="22" height="7" rx="3" class="bl-hatch"/>
+        <circle cx="32" cy="70" r="8" class="bl-wheel"/><circle cx="70" cy="70" r="8" class="bl-wheel"/>
+      </svg>
+    </div>
+    <div class="boot-title">VANLIFE</div>
+    <div class="boot-sub">COMPUTER DI BORDO</div>
+    <div class="boot-log" id="boot-log"></div>
+    <div class="boot-bar"><i></i></div>
+  </div>
+</div>
+
+<div id="shell" class="shell" hidden>
+
+  <header class="topbar">
+    <button class="tb-brand" id="tb-brand" title="Plancia">
+      <span class="tb-dot"></span><span class="tb-name">VANLIFE</span>
+    </button>
+    <div class="tb-clock"><b id="tb-time">--:--</b><small id="tb-date">--</small></div>
+    <div class="tb-status" id="tb-status">
+      <span class="chip" id="chip-gps" title="Stato GPS">◎ GPS</span>
+      <span class="chip" id="chip-net" title="Stato connessione">▲ RETE</span>
+      <span class="chip" id="chip-batt" hidden title="Batteria del tablet">▮ --%</span>
+    </div>
+    <div class="tb-actions">
+      <button class="icon-btn" id="btn-refresh" title="Aggiorna dati">⟳</button>
+      <button class="icon-btn" id="btn-night" title="Modalità notte (luce rossa)">☾</button>
+      <button class="icon-btn" id="btn-full" title="Schermo intero">⛶</button>
+    </div>
+  </header>
+
+  <nav class="rail" id="rail" aria-label="Sezioni"></nav>
+
+  <main class="view" id="view" tabindex="-1"></main>
+
+  <div class="alertbar" id="alertbar" hidden></div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="veil" id="veil" hidden></div>
+<div class="torch" id="torch" hidden><span>Tocca per spegnere</span></div>
+
+</body>
+</html>

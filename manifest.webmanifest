@@ -1,0 +1,25 @@
+{
+  "name": "VanLife · Computer di bordo",
+  "short_name": "VanLife",
+  "description": "Computer di bordo per la vita in van: radar pioggia, avvisi meteo geolocalizzati, livella, serbatoi, energia e app di bordo.",
+  "id": "/vanlife/",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#070b0f",
+  "theme_color": "#070b0f",
+  "lang": "it",
+  "dir": "ltr",
+  "categories": ["travel", "weather", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Radar pioggia", "url": "?v=radar", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Livella", "url": "?v=livella", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Salva posto", "url": "?v=posti&action=pin", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
