@@ -4,7 +4,7 @@
    - meteo: rete prima, cache come rete di sicurezza
    - radar: solo rete (un'immagine vecchia sarebbe peggio che nessuna) */
 
-const VERSION = 'v1';
+const VERSION = 'v3';
 const SHELL = `vanlife-shell-${VERSION}`;
 const TILES = `vanlife-tiles-${VERSION}`;
 const DATA = `vanlife-data-${VERSION}`;
@@ -24,7 +24,7 @@ const SHELL_FILES = [
 
 const TILE_HOSTS = ['tile.openstreetmap.org', 'basemaps.cartocdn.com', 'server.arcgisonline.com', 'tile.opentopomap.org'];
 const DATA_HOSTS = ['api.open-meteo.com', 'api.bigdatacloud.net'];
-const MAX_TILES = 900;
+const MAX_TILES = 400;   // le risposte opache costano quota: non esagerare
 
 self.addEventListener('install', (e) => {
   e.waitUntil((async () => {
@@ -71,7 +71,10 @@ self.addEventListener('fetch', (e) => {
       if (hit) return hit;
       try {
         const res = await fetch(req);
-        if (res.ok || res.type === 'opaque') { c.put(req, res.clone()); trimCache(TILES, MAX_TILES); }
+        if (res.ok || res.type === 'opaque') {
+          try { await c.put(req, res.clone()); await trimCache(TILES, MAX_TILES); }
+          catch { /* quota piena: pazienza, il tassello si vede lo stesso */ }
+        }
         return res;
       } catch { return hit || Response.error(); }
     })());

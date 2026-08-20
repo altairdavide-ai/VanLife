@@ -18,6 +18,10 @@ const BASES = {
     attr: '© OpenStreetMap, © OpenTopoMap (CC-BY-SA)', label: 'Topo' },
 };
 
+/* Quanti fotogrammi passati tenere: RainViewer ne pubblica ~13 (2 ore).
+   Su un tablet ogni fotogramma e' un livello di tasselli, quindi non esageriamo. */
+const MAX_PAST = 10;
+
 export default {
   id: 'radar', title: 'Radar', icon: '🛰️',
   mount(el, ctx) {
@@ -27,6 +31,7 @@ export default {
     let frames = [], idx = 0, playing = true, timer = null;
     let follow = true, mode = 'radar';
     let selfMarker = null, accCircle = null;
+    let tilesOk = 0, tilesKo = 0, loading = false;
     const spotLayer = window.L ? L.layerGroup() : null;
 
     /* ---------- struttura ---------- */
@@ -35,12 +40,15 @@ export default {
     const marks = h('div.tl-marks');
     const playBtn = h('button.icon-btn', { title: 'Play/pausa' }, '⏸');
     const nowcastCv = h('canvas.chart', { style: { height: '74px' } });
+    const noteEl = h('div.map-note', { hidden: true });
+    const diagEl = h('pre.diag', { hidden: true });
 
     const hud = h('div.map-hud',
       h('div.line',
         playBtn,
         h('div.timeline', marks, slider),
         tsEl),
+      noteEl,
       h('div.line', { style: { justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' } },
         h('div.legend', 'debole', h('span.sc'), 'forte'),
         h('div.row', { style: { gap: '6px' } },
@@ -63,28 +71,65 @@ export default {
           h('p.mute', { style: { fontSize: '12.5px', lineHeight: 1.55, margin: 0 } },
             'Le macchie colorate sono l\'eco dei radar meteo: azzurro pioggia debole, giallo/arancio rovescio, ',
             'rosso e viola grandine o temporale forte. I fotogrammi con l\'orario in ciano sono previsione, non misura. ',
-            'Guarda in che direzione si muovono le macchie: se la scia punta verso il puntino ciano, la prendi in pieno.'))));
+            'Guarda in che direzione si muovono le macchie: se la scia punta verso il puntino ciano, la prendi in pieno.'),
+          h('div.row', { style: { gap: '6px', marginTop: '10px' } },
+            h('button.btn.sm.ghost', { onclick: () => { diagEl.hidden = !diagEl.hidden; if (!diagEl.hidden) paintDiag(); } }, '🩺 Diagnostica')),
+          diagEl)));
 
     updateNowcastCard();
 
+    /* ---------- messaggi in mappa ---------- */
+    function note(txt, kind = '') {
+      noteEl.hidden = !txt;
+      noteEl.className = 'map-note' + (kind ? ' ' + kind : '');
+      clear(noteEl);
+      if (!txt) return;
+      noteEl.append(h('span', txt));
+      if (kind === 'bad') noteEl.append(h('button.btn.sm', { onclick: reload }, 'Riprova'));
+    }
+
     /* ---------- mappa ---------- */
+    /* Leaflet misura il contenitore al momento della creazione: se la sezione si
+       monta mentre lo schermo di accensione la copre, o prima che il layout sia
+       calcolato, la mappa nasce 0x0 e non carica un solo tassello. Quindi
+       aspettiamo che il contenitore abbia un'altezza vera. */
+    let initTries = 0;
     function initMap() {
-      if (!window.L) { toast('Mappa non disponibile'); return; }
+      if (!window.L) { note('Libreria mappa non caricata: ricarica la pagina.', 'bad'); return; }
+      if (!wrap.isConnected) return;
+      const r = wrap.getBoundingClientRect();
+      if (r.width < 40 || r.height < 40) {
+        if (initTries++ < 90) { requestAnimationFrame(initMap); return; }
+        note('La mappa non trova spazio sullo schermo.', 'bad');
+        return;
+      }
+
       const start = G.pos ? [G.pos.lat, G.pos.lon] : [43.5, 12.5];
-      map = L.map('map', { zoomControl: true, attributionControl: true, tap: true })
+      map = L.map(wrap.querySelector('#map'), { zoomControl: true, attributionControl: true, tap: true })
         .setView(start, G.pos ? 9 : 6);
       setBase(S.settings.mapStyle);
       spotLayer.addTo(map);
       map.on('dragstart', () => { follow = false; });
+      map.whenReady(() => setTimeout(() => map && map.invalidateSize(), 60));
       drawSelf();
       drawSpots();
       loadFrames();
     }
 
+    /* Rotazione del tablet, apertura della tastiera, fine dell'accensione:
+       ogni cambio di dimensione va riportato a Leaflet o restano buchi grigi. */
+    const ro = window.ResizeObserver ? new ResizeObserver(() => { if (map) map.invalidateSize(); }) : null;
+    ro?.observe(wrap);
+    const onResize = () => { if (map) map.invalidateSize(); };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+
     function setBase(key) {
       const b = BASES[key] || BASES.osm;
       if (baseLayer) map.removeLayer(baseLayer);
-      baseLayer = L.tileLayer(b.url, { maxZoom: b.max, attribution: b.attr, subdomains: 'abc', crossOrigin: true }).addTo(map);
+      // Niente crossOrigin: non leggiamo mai i pixel, e chiedere il CORS a un
+      // server di tasselli che non lo concede fa fallire l'immagine e basta.
+      baseLayer = L.tileLayer(b.url, { maxZoom: b.max, attribution: b.attr, subdomains: 'abc' }).addTo(map);
       baseLayer.setZIndex(1);
       setSetting('mapStyle', key);
     }
@@ -99,10 +144,15 @@ export default {
 
     function cycleMode() {
       mode = mode === 'radar' ? 'satellite' : 'radar';
-      layers.forEach((l) => map.removeLayer(l));
-      layers.clear();
+      dropLayers();
       toast(mode === 'radar' ? 'Eco radar (pioggia)' : 'Satellite infrarosso (nuvole)');
       loadFrames(true);
+    }
+
+    function dropLayers() {
+      layers.forEach((l) => { if (map) map.removeLayer(l); });
+      layers.clear();
+      tilesOk = 0; tilesKo = 0;
     }
 
     function drawSelf() {
@@ -132,13 +182,37 @@ export default {
 
     /* ---------- fotogrammi radar ---------- */
     async function loadFrames(keepIdx = false) {
+      if (!map || loading) return;
+      loading = true;
+      if (!frames.length) note('Carico i fotogrammi del radar…');
       const meta = await wx.refreshRadar();
-      if (!meta || !map) return;
+      loading = false;
+      if (!map) return;
+
+      const st = wx.radarState();
+      if (!meta) {
+        frames = [];
+        tsEl.textContent = 'n/d';
+        clear(marks);
+        note(navigator.onLine
+          ? 'Radar non raggiungibile (' + (st.error || 'errore') + ').'
+          : 'Sei offline: il radar ha bisogno di rete.', 'bad');
+        paintDiag();
+        return;
+      }
+
       const list = mode === 'radar'
-        ? [...(meta.radar?.past || []), ...(meta.radar?.nowcast || [])]
-        : (meta.satellite?.infrared || []);
+        ? [...(meta.radar?.past || []).slice(-MAX_PAST), ...(meta.radar?.nowcast || [])]
+        : (meta.satellite?.infrared || []).slice(-MAX_PAST);
       frames = list.map((f) => ({ ...f, host: meta.host, future: f.time * 1000 > Date.now() + 60000 }));
-      if (!frames.length) { tsEl.textContent = 'n/d'; return; }
+      if (!frames.length) {
+        tsEl.textContent = 'n/d';
+        note(mode === 'radar' ? 'Nessun fotogramma disponibile adesso.' : 'Satellite non disponibile in questa zona.', 'bad');
+        paintDiag();
+        return;
+      }
+
+      note('');
       slider.max = String(frames.length - 1);
       clear(marks);
       frames.forEach((f) => marks.append(h('i', { class: f.future ? 'fut' : '' })));
@@ -149,17 +223,26 @@ export default {
       idx = Math.min(idx, frames.length - 1);
       show(idx);
       if (playing) play();
+      paintDiag();
     }
 
     function layerFor(i) {
       const f = frames[i];
-      if (!f) return null;
+      if (!f || !map) return null;
       if (layers.has(f.path)) return layers.get(f.path);
       const st = S.settings;
+      // I tasselli sono chiesti a 256 px, la stessa misura della griglia di
+      // Leaflet: chiederli a 512 e disegnarli in 256 sprecava banda e basta.
       const url = mode === 'radar'
-        ? `${f.host}${f.path}/512/{z}/{x}/{y}/${st.radarColor}/${st.radarSmooth ? 1 : 0}_${st.radarSnow ? 1 : 0}.png`
-        : `${f.host}${f.path}/512/{z}/{x}/{y}/0/0_0.png`;
-      const l = L.tileLayer(url, { opacity: 0, maxNativeZoom: 12, maxZoom: 20, tileSize: 256, zIndex: 10, crossOrigin: true });
+        ? `${f.host}${f.path}/256/{z}/{x}/{y}/${st.radarColor ?? 2}/${st.radarSmooth ? 1 : 0}_${st.radarSnow ? 1 : 0}.png`
+        : `${f.host}${f.path}/256/{z}/{x}/{y}/0/0_0.png`;
+      const l = L.tileLayer(url, { opacity: 0, maxNativeZoom: 12, maxZoom: 20, tileSize: 256, zIndex: 10 });
+      l.on('tileload', () => { tilesOk++; });
+      l.on('tileerror', () => {
+        tilesKo++;
+        // Sfondo che carica ma eco che non arriva: meglio dirlo che restare muti.
+        if (tilesKo >= 8 && tilesOk === 0) note('I tasselli del radar non si caricano.', 'bad');
+      });
       layers.set(f.path, l);
       l.addTo(map);
       return l;
@@ -198,12 +281,30 @@ export default {
 
     async function reload() {
       toast('Aggiorno radar…');
+      note('Aggiorno…');
       await wx.refreshRadar(true);
       if (G.pos) await wx.refresh(G.pos, true);
-      layers.forEach((l) => map && map.removeLayer(l));
-      layers.clear();
+      dropLayers();
+      frames = [];
       await loadFrames();
       updateNowcastCard();
+    }
+
+    /* ---------- diagnostica ---------- */
+    function paintDiag() {
+      if (diagEl.hidden) return;
+      const st = wx.radarState();
+      const r = wrap.getBoundingClientRect();
+      diagEl.textContent = [
+        `posizione   ${G.pos ? `${G.pos.lat.toFixed(3)}, ${G.pos.lon.toFixed(3)} (±${Math.round(G.pos.acc || 0)}m)` : 'assente — stato ' + G.status}`,
+        `rete        ${navigator.onLine ? 'online' : 'OFFLINE'}`,
+        `api         ${st.ok ? 'ok' : 'ERRORE: ' + (st.error || 'mai contattata')}`,
+        `host        ${st.host || '—'}`,
+        `fotogrammi  ${st.past} passati + ${st.nowcast} previsti · in timeline ${frames.length}`,
+        `tasselli    ${tilesOk} ok / ${tilesKo} falliti`,
+        `mappa       ${Math.round(r.width)}×${Math.round(r.height)} px · leaflet ${window.L?.version || 'assente'}`,
+        `modo        ${mode} · sfondo ${S.settings.mapStyle}`,
+      ].join('\n');
     }
 
     function updateNowcastCard() {
@@ -219,10 +320,10 @@ export default {
 
     /* ---------- avvio ---------- */
     if (!G.pos) geoOnce().catch(() => {});
-    setTimeout(initMap, 30);
+    requestAnimationFrame(initMap);
 
     const offs = [
-      geo.on('pos', () => { drawSelf(); }),
+      geo.on('pos', () => { drawSelf(); paintDiag(); }),
       wx.wx.on('data', updateNowcastCard),
     ];
     const refreshTimer = setInterval(() => { if (!document.hidden) loadFrames(true); }, 5 * 60 * 1000);
@@ -231,6 +332,9 @@ export default {
       offs.forEach((f) => f());
       stopTimer();
       clearInterval(refreshTimer);
+      ro?.disconnect();
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
       if (map) { map.remove(); map = null; }
     };
   },

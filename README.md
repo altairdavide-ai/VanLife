@@ -43,6 +43,19 @@ python3 -m http.server 8099
 
 ---
 
+## Se il radar non carica
+
+Nella sezione Radar, dentro la scheda "Come si legge", c'è il tasto
+**🩺 Diagnostica**: mostra stato del GPS, esito della chiamata a RainViewer,
+numero di fotogrammi, tasselli caricati e falliti, dimensione reale della mappa.
+È il primo posto da guardare quando la mappa resta vuota.
+
+Se compare una scritta rossa sulla mappa, il radar ha un motivo preciso per non
+funzionare (rete assente, captive portal del campeggio, servizio giù) e il tasto
+**Riprova** ritenta subito.
+
+---
+
 ## Cosa c'è dentro
 
 | Sezione | A cosa serve |

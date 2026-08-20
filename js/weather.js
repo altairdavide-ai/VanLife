@@ -9,11 +9,23 @@ export const W = {
   data: store.get('wx', null),          // risposta Open-Meteo
   at: store.get('wxAt', 0),             // timestamp del fetch
   forPos: store.get('wxPos', null),
-  radar: store.get('radarMeta', null),  // frame RainViewer
+  radar: null,             // frame RainViewer (vedi sotto: la cache scade presto)
   radarAt: 0,
+  radarError: '',
+  radarTriedAt: 0,
   loading: false,
   error: '',
 };
+
+/* Una lista di fotogrammi vecchia e' peggio di nessuna lista: RainViewer tiene
+   online i tasselli per poche ore, quindi oltre la mezz'ora la buttiamo via. */
+const RADAR_CACHE_MS = 30 * 60 * 1000;
+(function restoreRadar() {
+  const meta = store.get('radarMeta', null);
+  const at = store.get('radarMetaAt', 0);
+  if (meta && Date.now() - at < RADAR_CACHE_MS) { W.radar = meta; W.radarAt = at; }
+  else { store.del?.('radarMeta'); }
+}());
 
 const OM = 'https://api.open-meteo.com/v1/forecast';
 const RV = 'https://api.rainviewer.com/public/weather-maps.json';
@@ -57,14 +69,37 @@ export async function refresh(pos, force = false) {
 /** Elenco dei frame radar (passato + nowcast) da RainViewer. */
 export async function refreshRadar(force = false) {
   if (!force && W.radar && Date.now() - W.radarAt < 4 * 60 * 1000) return W.radar;
+  W.radarTriedAt = Date.now();
   try {
     const d = await fetchJSON(RV, 10000);
+    if (!d || !d.host || !d.radar?.past?.length) throw new Error('risposta senza fotogrammi');
     W.radar = d;
     W.radarAt = Date.now();
-    store.set('radarMeta', d);
+    W.radarError = '';
+    store.set('radarMeta', d); store.set('radarMetaAt', W.radarAt);
     wx.emit('radar', d);
-  } catch { /* il radar puo' mancare: il meteo resta valido */ }
+  } catch (e) {
+    // Il radar puo' mancare (rete assente, captive portal del campeggio, servizio
+    // giu'): il meteo resta valido, ma l'errore va detto invece di sparire.
+    W.radarError = e.name === 'AbortError' ? 'nessuna risposta entro 10s' : (e.message || 'errore di rete');
+    if (W.radar && Date.now() - W.radarAt > RADAR_CACHE_MS) W.radar = null;
+    wx.emit('radar', W.radar);
+  }
   return W.radar;
+}
+
+/** Riassunto leggibile dello stato del radar, per la diagnostica. */
+export function radarState() {
+  const m = W.radar;
+  return {
+    ok: !!m && !W.radarError,
+    error: W.radarError,
+    host: m?.host || '',
+    past: m?.radar?.past?.length || 0,
+    nowcast: m?.radar?.nowcast?.length || 0,
+    ageMin: W.radarAt ? (Date.now() - W.radarAt) / 60000 : null,
+    tried: !!W.radarTriedAt,
+  };
 }
 
 /* ---------------- codici WMO ---------------- */

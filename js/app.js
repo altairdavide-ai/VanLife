@@ -45,8 +45,12 @@ async function boot() {
   }
   await new Promise((r) => setTimeout(r, 260));
   $('#boot').classList.add('done');
-  $('#shell').hidden = false;
-  setTimeout(() => $('#boot').remove(), 700);
+  setTimeout(() => {
+    $('#boot').remove();
+    // la sezione attiva puo' essersi montata sotto il velo di accensione:
+    // un resize la fa rimisurare (serve alla mappa del radar).
+    window.dispatchEvent(new Event('resize'));
+  }, 700);
 }
 
 /* ---------------- contesto passato alle sezioni ---------------- */
@@ -242,6 +246,10 @@ async function main() {
   geoSvc.start();
   if (S.settings.keepAwake) setWakeLock(true);
 
+  // Lo shell deve essere misurabile prima di montare qualsiasi sezione: il velo
+  // di accensione e' un overlay fisso, quindi copre lo schermo lo stesso.
+  $('#shell').hidden = false;
+
   const params = new URLSearchParams(location.search);
   const start = params.get('v') || S.settings.lastView || 'plancia';
   goto(byId(start).id, { action: params.get('action') });
@@ -253,8 +261,19 @@ async function main() {
   setInterval(() => { if (!document.hidden) refresh(); }, Math.max(5, S.settings.autoRefreshMin) * 60 * 1000);
 
   if ('serviceWorker' in navigator) {
-    try { await navigator.serviceWorker.register('sw.js'); }
-    catch (e) { console.warn('service worker non registrato', e); }
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloading) return;   // prima installazione: niente reload
+      reloading = true;
+      toast('Nuova versione, riavvio…');
+      setTimeout(() => location.reload(), 600);
+    });
+    try {
+      const reg = await navigator.serviceWorker.register('sw.js');
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update(); });
+      setInterval(() => reg.update(), 30 * 60 * 1000);
+    } catch (e) { console.warn('service worker non registrato', e); }
   }
 }
 
