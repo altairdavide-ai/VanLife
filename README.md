@@ -14,26 +14,32 @@ un'app normale. I dati restano sul tablet.
 
 ---
 
-## Provarla subito
+## Metterla sul tablet
 
-### 1. Pubblicala su GitHub Pages (consigliato)
+Serve `https`: senza, Android non concede GPS, accelerometro e installazione.
+`http://localhost` fa eccezione, gli indirizzi tipo `http://192.168.x.x` no.
 
-Serve `https`, altrimenti Android non dà GPS, sensori e installazione.
+### Via GitHub Pages (due minuti)
 
-1. Su GitHub: **Settings → Pages → Source: GitHub Actions**.
-2. Scheda **Actions → "Pubblica su GitHub Pages" → Run workflow**, scegliendo questo branch.
-3. Apri l'indirizzo che compare (`https://<utente>.github.io/VanLife/`) con Chrome sul tablet.
-4. Menu di Chrome (⋮) → **Installa app**. Ora hai l'icona sulla Home.
+Pages pubblica un repo **pubblico** su qualsiasi piano; su un repo privato serve
+GitHub Pro o superiore. Qui dentro non ci sono chiavi né segreti: se il repo è
+privato, il modo più rapido è renderlo pubblico.
 
-### 2. In locale, per provarla al volo
+1. **Settings → General → Change repository visibility → Public** (solo se serve).
+2. **Settings → Pages → Source: _Deploy from a branch_**, branch
+   `claude/van-life-android-app-geghh7`, cartella `/ (root)` → **Save**.
+3. Dopo un paio di minuti l'indirizzo è `https://<utente>.github.io/VanLife/`.
+4. Aprilo con **Chrome sul tablet** → menu ⋮ → **Installa app**.
+
+Se invece unisci il branch in `main`, il workflow in `.github/workflows/pages.yml`
+pubblica da solo a ogni push (in quel caso scegli **Source: GitHub Actions**).
+
+### In locale, per provarla dal computer
 
 ```bash
 python3 -m http.server 8099
 # poi apri http://localhost:8099
 ```
-
-Da un altro dispositivo l'indirizzo `http://192.168.x.x:8099` funziona, ma senza `https`
-il browser blocca GPS e sensori: per l'uso vero conviene Pages.
 
 ---
 
